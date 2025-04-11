@@ -1,55 +1,8 @@
 const input = document.getElementById('inputBox');
 const buttons = document.querySelectorAll('button');
 
-const OPERATIONS = {
-    sum: '+',
-    subtract: '-',
-    multiply: '*',
-    division: '/'
-};
-
-function calculate({ a, b, operation }) {
-    if (typeof a !== 'number' || typeof b !== 'number') {
-        return 'Ошибка: аргументы должны быть числами';
-    }
-
-    let result = null;
-
-    switch (operation) {
-        case OPERATIONS.sum:
-            result = sum(a, b);
-            break;
-        case OPERATIONS.subtract:
-            result = subtract(a, b);
-            break;
-        case OPERATIONS.multiply:
-            result = multiply(a, b);
-            break;
-        case OPERATIONS.division:
-            result = division(a, b);
-            break;
-        default:
-            result = 'Ошибка: неизвестная операция';
-    }
-
-    return result;
-}
-
-function sum(a, b) {
-    return a + b;
-}
-function subtract(a, b) {
-    return a - b;
-}
-function multiply(a, b) {
-    return a * b;
-}
-function division(a, b) {
-    if (b === 0) return '0';
-    return a / b;
-}
-
 let expression = "";
+let justCalculated = false;
 
 buttons.forEach(button => {
     button.addEventListener('click', (e) => {
@@ -58,44 +11,79 @@ buttons.forEach(button => {
         if (value === 'AC') {
             expression = "";
             input.value = "";
+            justCalculated = false;
         } else if (value === 'DEL') {
             expression = expression.slice(0, -1);
             input.value = expression;
         } else if (value === '=') {
-            const parsed = parseExpression(expression);
-            if (parsed) {
-                const result = calculate(parsed);
-                input.value = result;
-                expression = result.toString();
-            } else {
-                input.value = 'Ошибка';
-                expression = '';
-            }
+            const result = safeEvaluate(expression);
+            input.value = result;
+            expression = typeof result === 'number' ? result.toString() : '';
+            justCalculated = true;
         } else if (value === '%') {
-            if (expression.length > 0) {
-                const lastNumberMatch = expression.match(/(\d+\.?\d*)$/);
-                if (lastNumberMatch) {
-                    const number = parseFloat(lastNumberMatch[1]);
-                    const percent = number / 100;
-                    expression = expression.replace(/(\d+\.?\d*)$/, percent.toString());
-                    input.value = expression;
-                }
+            const lastNumberMatch = expression.match(/(\d+\.?\d*)$/);
+            if (lastNumberMatch) {
+                const number = parseFloat(lastNumberMatch[1]);
+                const percent = number / 100;
+                expression = expression.replace(/(\d+\.?\d*)$/, percent.toString());
+                input.value = expression;
             }
         } else {
-            expression += value;
+            if (justCalculated && /[0-9]/.test(value)) {
+                expression = value;
+            } else {
+                expression += value;
+            }
             input.value = expression;
+            justCalculated = false;
         }
     });
 });
 
 
-function parseExpression(expr) {
-    const match = expr.match(/^(\d+\.?\d*)([+\-*/])(\d+\.?\d*)$/);
-    if (!match) return null;
+function safeEvaluate(expr) {
+    try {
+        const tokens = [];
+        let current = '';
+        for (let i = 0; i < expr.length; i++) {
+            const char = expr[i];
+            if ('+-*/'.includes(char)) {
+                if (i === 0 || '+-*/'.includes(expr[i - 1])) {
+                    current += char; 
+                } else {
+                    tokens.push(current);
+                    tokens.push(char);
+                    current = '';
+                }
+            } else {
+                current += char;
+            }
+        }
+        if (current !== '') tokens.push(current);
 
-    const a = parseFloat(match[1]);
-    const operation = match[2];
-    const b = parseFloat(match[3]);
+        let result = parseFloat(tokens[0]);
+        if (isNaN(result)) return 'Ошибка';
 
-    return { a, b, operation };
+        for (let i = 1; i < tokens.length; i += 2) {
+            const operator = tokens[i];
+            const nextNum = parseFloat(tokens[i + 1]);
+
+            if (isNaN(nextNum)) return 'Ошибка';
+
+            switch (operator) {
+                case '+': result += nextNum; break;
+                case '-': result -= nextNum; break;
+                case '*': result *= nextNum; break;
+                case '/':
+                    if (nextNum === 0) return 'Ошибка: деление на 0';
+                    result /= nextNum;
+                    break;
+                default: return 'Ошибка: неизвестный оператор';
+            }
+        }
+
+        return parseFloat(result.toFixed(6)); 
+    } catch {
+        return 'Ошибка';
+    }
 }
